@@ -1,0 +1,395 @@
+requirements.txt
+  s_0934cd4343c35c::t_781fc8bcc56786 9
+app/pipeline/worker.py
+  s_0934cd4343c35c::t_cff1cb7077ea06 62
+  s_0934cd4343c35c::t_ec6916a5108716 20,63-64,69,75-76,82,87-88,161-164
+  s_0934cd4343c35c::t_5fcdd93627328e 165-173
+  s_0934cd4343c35c::t_2b2f4b80ed9e8a 188-190,192-193,197-199
+  s_0934cd4343c35c::t_23260613dae806 116-120
+tests/test_redis_adapters.py
+  s_0934cd4343c35c::t_52bd5c6b8420c1 55
+  s_0934cd4343c35c::t_70ec95c7322e93 8,12-13,41
+  s_0934cd4343c35c::t_f2969e087014d1 1-7,9-11,14-40,42-54,56
+app/pipeline/dedup.py
+  s_0934cd4343c35c::t_ec6916a5108716 111,125-130,191-192,200-201
+  s_0934cd4343c35c::t_d004d2eab4521a 8,12,50-81,107-109,116,205
+README.md
+  s_0934cd4343c35c::t_063bcef175aba4 60,67
+  s_0934cd4343c35c::t_3e0a1f56d0f21b 73,76-81,90,137,144,146-147
+  s_0934cd4343c35c::t_ca7f2d25e3c1e6 75
+tests/test_gemini_live.py
+  s_0934cd4343c35c::t_dddd6eaee6a869 1-8,10-21
+  s_0934cd4343c35c::t_bfb715963e18bc 9,22-32
+app/pipeline/rate_limit.py
+  s_0934cd4343c35c::t_781fc8bcc56786 47
+  s_0934cd4343c35c::t_76e2f7a06f04d8 1-8,11-16,19,29-46,48-57
+  s_0934cd4343c35c::t_7435f27ef6f31e 9-10,17-18,20-28
+app/main.py
+  s_0934cd4343c35c::t_0ec9fc41915f68 18,20,31,50
+  s_0934cd4343c35c::t_781fc8bcc56786 21,48-49
+app/llm/batching.py
+  s_0934cd4343c35c::t_781fc8bcc56786 6,39-40
+  s_0934cd4343c35c::t_deb50b39abf2ad 1-5,7-38,41-59
+frontend/app.js
+  s_0934cd4343c35c::t_2dc53047e0edf6 63,511,519-540
+  s_0934cd4343c35c::t_54e03534de00d0 412-413
+  s_0934cd4343c35c::t_4ffa3a389538f5 23-24,50,69,71,337-338,348-349,356-364,371,377-381,388,391-392,401,414,513,515,541,581
+app/llm/resilient.py
+  s_0934cd4343c35c::t_73cbd3e0251864 1-3,6-21,23-26,28-34
+  s_0934cd4343c35c::t_69ff52b3969c22 4-5,35-36
+  s_0934cd4343c35c::t_2dc53047e0edf6 22,27,50-51,53
+  s_0934cd4343c35c::t_1bdf1abc7ecfe0 37-49,52,54-59
+tests/test_schema_migration.py
+  s_0934cd4343c35c::t_6170c9d21e79e2 1-31
+app/db/session.py
+  s_0934cd4343c35c::t_2b2f4b80ed9e8a 81-92
+app/db/init_db.py
+  s_0934cd4343c35c::t_f6eb8da6542fcc 177
+  s_0934cd4343c35c::t_3fddf13e4b7e4d 37,39-40,51,60-61,72-126
+  s_0934cd4343c35c::t_2c51af64750736 127-131
+app/llm/groq.py
+  s_0934cd4343c35c::t_deb50b39abf2ad 3-4,100-138
+  s_0934cd4343c35c::t_cff1cb7077ea06 20,30,39
+.env.example
+  s_0934cd4343c35c::t_3e0a1f56d0f21b 10,12-13,16-27
+  s_0934cd4343c35c::t_ca7f2d25e3c1e6 11
+  s_0934cd4343c35c::t_555801a2887bf7 14-15
+  s_0934cd4343c35c::t_063bcef175aba4 8
+app/core/config.py
+  s_0934cd4343c35c::t_e2c51d1bda6e32 13-16,19,21-22,28-35
+  s_0934cd4343c35c::t_ca7f2d25e3c1e6 20
+app/llm/validator.py
+  s_0934cd4343c35c::t_ec6916a5108716 4,51-55,60-61,96,99-102,108
+  s_0934cd4343c35c::t_dbe33b7d3fabad 5,95
+tests/test_groq.py
+  s_0934cd4343c35c::t_1275a38fc6aadb 76-87
+  s_0934cd4343c35c::t_2c51af64750736 136-138,141-142
+  s_0934cd4343c35c::t_19e891e6182f66 52,128
+tests/test_pipeline.py
+  s_0934cd4343c35c::t_19e891e6182f66 168
+tests/test_groq_live.py
+  s_0934cd4343c35c::t_3a54ab05b74b17 23-39
+tests/test_provider_routing.py
+  s_0934cd4343c35c::t_dc7dac90586741 1-40
+app/api/routes.py
+  s_0934cd4343c35c::t_23260613dae806 146
+  s_0934cd4343c35c::t_db2b92ed608fd1 225,262-263,269
+  s_0934cd4343c35c::t_09a100330fefeb 364
+  s_0934cd4343c35c::t_d149cb4b0d77f5 219
+  s_0934cd4343c35c::t_3efca5f9f46cc2 223-224,229-230
+  s_0934cd4343c35c::t_f6eb8da6542fcc 214-217,256-259,264,271-275
+  s_0934cd4343c35c::t_a963a592931813 4,6,24-29,187-188,210-213,218,220,237-238,240-241,243,283,285,300-303,321,356-361,373
+  s_0934cd4343c35c::t_54e03534de00d0 74,91-93,138-139,333-334,353-355
+app/llm/base.py
+  s_0934cd4343c35c::t_deb50b39abf2ad 4-5,31-34
+tests/test_batching.py
+  s_0934cd4343c35c::t_b6306956705e8e 1-36
+tests/conftest.py
+  s_0934cd4343c35c::t_fbd8d4ff5a9e26 4,16,18-21
+tests/test_redis_live.py
+  s_0934cd4343c35c::t_dddd6eaee6a869 1-42
+app/llm/gemini.py
+  s_0934cd4343c35c::t_73cbd3e0251864 1-47,50,53-57
+  s_0934cd4343c35c::t_cae2e22e4e00af 48-49,51-52
+app/pipeline/queue.py
+  s_0934cd4343c35c::t_e2c253b6e20976 73-85
+  s_0934cd4343c35c::t_781fc8bcc56786 6
+  s_0934cd4343c35c::t_76e2f7a06f04d8 12,25-29,39-42,62-72,86-121
+app/llm/quality.py
+  s_0934cd4343c35c::t_e2c51d1bda6e32 1-76
+app/llm/provider.py
+  s_0934cd4343c35c::t_73cbd3e0251864 7-8,39,41
+  s_0934cd4343c35c::t_69ff52b3969c22 9,27,38,40
+  s_0934cd4343c35c::t_8b2c6d266e6bdd 12-20,29-37
+app/llm/mock.py
+  s_0934cd4343c35c::t_ec6916a5108716 106
+frontend/style.css
+  s_0934cd4343c35c::t_c0c5f89c094ea1 521-522
+tests/test_api.py
+  s_0934cd4343c35c::t_0897e91b467216 202-205,209-221,225-230
+  s_0934cd4343c35c::t_51e07f2a78e343 222-224
+  s_0934cd4343c35c::t_0a0b084a201acb 83-92
+  s_0934cd4343c35c::t_02000fb7570585 206-208
+app/db/models.py
+  s_0934cd4343c35c::t_dc3cc0faddc0c4 111-112
+  s_0934cd4343c35c::t_ec6916a5108716 138
+  s_0934cd4343c35c::t_e2c51d1bda6e32 27,30,60-61,82-92
+tests/test_quality.py
+  s_0934cd4343c35c::t_b6306956705e8e 1-30
+frontend/index.html
+  s_0934cd4343c35c::t_972fcbe3404602 139-148,220-223,249-251
+  s_0934cd4343c35c::t_2dc53047e0edf6 209-211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "autter_version": "2.2.1",
+  "base_commit_sha": "f034f5c205791fe54186a1ca5ef9ed6f8aa7f0a3",
+  "branch": "main",
+  "prompts": {
+    "s_0934cd4343c35c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20cf7-5298-76e3-a37b-bd4865c96ca9",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "CatalogIQ Project <catalogiq@example.invalid>",
+      "messages_url": "cas:2da48e44242b8cfbb61df290f65f0e58916b670a1272712cc134f0150ad8709f",
+      "total_additions": 1327,
+      "total_deletions": 171,
+      "accepted_lines": 1814,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_dfcf87ce978c6b": {
+      "author": "CatalogIQ Project <catalogiq@example.invalid>"
+    }
+  },
+  "sessions": {
+    "s_0934cd4343c35c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a20cf7-5298-76e3-a37b-bd4865c96ca9",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "CatalogIQ Project <catalogiq@example.invalid>",
+      "messages_url": "cas:2da48e44242b8cfbb61df290f65f0e58916b670a1272712cc134f0150ad8709f",
+      "stats": {
+        "total_additions": 1327,
+        "total_deletions": 171,
+        "accepted_lines": 1814,
+        "overriden_lines": 0,
+        "files": {
+          ".env.example": {
+            "total_additions": 22,
+            "total_deletions": 4,
+            "accepted_lines": 19,
+            "overriden_lines": 0
+          },
+          "README.md": {
+            "total_additions": 17,
+            "total_deletions": 9,
+            "accepted_lines": 16,
+            "overriden_lines": 0
+          },
+          "app/api/routes.py": {
+            "total_additions": 79,
+            "total_deletions": 35,
+            "accepted_lines": 71,
+            "overriden_lines": 0
+          },
+          "app/core/config.py": {
+            "total_additions": 19,
+            "total_deletions": 2,
+            "accepted_lines": 17,
+            "overriden_lines": 0
+          },
+          "app/db/init_db.py": {
+            "total_additions": 67,
+            "total_deletions": 2,
+            "accepted_lines": 67,
+            "overriden_lines": 0
+          },
+          "app/db/models.py": {
+            "total_additions": 24,
+            "total_deletions": 4,
+            "accepted_lines": 22,
+            "overriden_lines": 0
+          },
+          "app/db/session.py": {
+            "total_additions": 12,
+            "total_deletions": 0,
+            "accepted_lines": 12,
+            "overriden_lines": 0
+          },
+          "app/llm/base.py": {
+            "total_additions": 6,
+            "total_deletions": 1,
+            "accepted_lines": 6,
+            "overriden_lines": 0
+          },
+          "app/llm/batching.py": {
+            "total_additions": 59,
+            "total_deletions": 0,
+            "accepted_lines": 59,
+            "overriden_lines": 0
+          },
+          "app/llm/gemini.py": {
+            "total_additions": 59,
+            "total_deletions": 2,
+            "accepted_lines": 57,
+            "overriden_lines": 0
+          },
+          "app/llm/groq.py": {
+            "total_additions": 44,
+            "total_deletions": 3,
+            "accepted_lines": 44,
+            "overriden_lines": 0
+          },
+          "app/llm/mock.py": {
+            "total_additions": 1,
+            "total_deletions": 0,
+            "accepted_lines": 1,
+            "overriden_lines": 0
+          },
+          "app/llm/provider.py": {
+            "total_additions": 37,
+            "total_deletions": 12,
+            "accepted_lines": 28,
+            "overriden_lines": 0
+          },
+          "app/llm/quality.py": {
+            "total_additions": 76,
+            "total_deletions": 0,
+            "accepted_lines": 76,
+            "overriden_lines": 0
+          },
+          "app/llm/resilient.py": {
+            "total_additions": 71,
+            "total_deletions": 12,
+            "accepted_lines": 59,
+            "overriden_lines": 0
+          },
+          "app/llm/validator.py": {
+            "total_additions": 17,
+            "total_deletions": 1,
+            "accepted_lines": 16,
+            "overriden_lines": 0
+          },
+          "app/main.py": {
+            "total_additions": 8,
+            "total_deletions": 3,
+            "accepted_lines": 7,
+            "overriden_lines": 0
+          },
+          "app/pipeline/dedup.py": {
+            "total_additions": 50,
+            "total_deletions": 5,
+            "accepted_lines": 50,
+            "overriden_lines": 0
+          },
+          "app/pipeline/queue.py": {
+            "total_additions": 73,
+            "total_deletions": 0,
+            "accepted_lines": 73,
+            "overriden_lines": 0
+          },
+          "app/pipeline/rate_limit.py": {
+            "total_additions": 72,
+            "total_deletions": 15,
+            "accepted_lines": 57,
+            "overriden_lines": 0
+          },
+          "app/pipeline/worker.py": {
+            "total_additions": 53,
+            "total_deletions": 24,
+            "accepted_lines": 37,
+            "overriden_lines": 0
+          },
+          "data/__final_review_smoke.csv": {
+            "total_additions": 2,
+            "total_deletions": 0,
+            "accepted_lines": 0,
+            "overriden_lines": 0
+          },
+          "frontend/app.js": {
+            "total_additions": 59,
+            "total_deletions": 11,
+            "accepted_lines": 638,
+            "overriden_lines": 0
+          },
+          "frontend/index.html": {
+            "total_additions": 22,
+            "total_deletions": 0,
+            "accepted_lines": 22,
+            "overriden_lines": 0
+          },
+          "frontend/style.css": {
+            "total_additions": 2,
+            "total_deletions": 0,
+            "accepted_lines": 2,
+            "overriden_lines": 0
+          },
+          "requirements.txt": {
+            "total_additions": 1,
+            "total_deletions": 0,
+            "accepted_lines": 1,
+            "overriden_lines": 0
+          },
+          "tests/conftest.py": {
+            "total_additions": 7,
+            "total_deletions": 2,
+            "accepted_lines": 6,
+            "overriden_lines": 0
+          },
+          "tests/test_api.py": {
+            "total_additions": 49,
+            "total_deletions": 7,
+            "accepted_lines": 46,
+            "overriden_lines": 0
+          },
+          "tests/test_batching.py": {
+            "total_additions": 36,
+            "total_deletions": 0,
+            "accepted_lines": 36,
+            "overriden_lines": 0
+          },
+          "tests/test_gemini_live.py": {
+            "total_additions": 40,
+            "total_deletions": 8,
+            "accepted_lines": 32,
+            "overriden_lines": 0
+          },
+          "tests/test_groq.py": {
+            "total_additions": 20,
+            "total_deletions": 2,
+            "accepted_lines": 20,
+            "overriden_lines": 0
+          },
+          "tests/test_groq_live.py": {
+            "total_additions": 17,
+            "total_deletions": 0,
+            "accepted_lines": 17,
+            "overriden_lines": 0
+          },
+          "tests/test_pipeline.py": {
+            "total_additions": 1,
+            "total_deletions": 1,
+            "accepted_lines": 1,
+            "overriden_lines": 0
+          },
+          "tests/test_provider_routing.py": {
+            "total_additions": 40,
+            "total_deletions": 0,
+            "accepted_lines": 40,
+            "overriden_lines": 0
+          },
+          "tests/test_quality.py": {
+            "total_additions": 30,
+            "total_deletions": 0,
+            "accepted_lines": 30,
+            "overriden_lines": 0
+          },
+          "tests/test_redis_adapters.py": {
+            "total_additions": 62,
+            "total_deletions": 6,
+            "accepted_lines": 56,
+            "overriden_lines": 0
+          },
+          "tests/test_redis_live.py": {
+            "total_additions": 42,
+            "total_deletions": 0,
+            "accepted_lines": 42,
+            "overriden_lines": 0
+          },
+          "tests/test_schema_migration.py": {
+            "total_additions": 31,
+            "total_deletions": 0,
+            "accepted_lines": 31,
+            "overriden_lines": 0
+          }
+        }
+      }
+    }
+  }
+}
