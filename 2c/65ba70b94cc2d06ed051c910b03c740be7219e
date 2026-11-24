@@ -1,0 +1,17 @@
+DESIGN.md
+  h_dfcf87ce978c6b 8-34,91-137
+data/data.csv
+  h_dfcf87ce978c6b 1-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "autter_version": "2.2.1",
+  "base_commit_sha": "2c65ba70b94cc2d06ed051c910b03c740be7219e",
+  "branch": "main",
+  "prompts": {},
+  "humans": {
+    "h_dfcf87ce978c6b": {
+      "author": "CatalogIQ Project <catalogiq@example.invalid>"
+    }
+  }
+}
