@@ -49,6 +49,7 @@ async def test_groq_success_sends_expected_request_and_validates_response():
             "category": "Groceries",
             "brand": "Amul",
             "tags": ["butter", "dairy"],
+            "confidence": None,
         }
         assert len(seen) == 1
         request = seen[0]
@@ -69,6 +70,19 @@ async def test_groq_success_sends_expected_request_and_validates_response():
         assert len(seen) == 2
     finally:
         await provider.aclose()
+
+
+@pytest.mark.asyncio
+async def test_groq_batch_maps_out_of_order_ids_and_rejects_duplicates():
+    entry = {"clean_title": "Amul Butter 500g", "category": "Groceries", "brand": "Amul", "tags": ["butter"], "confidence": .9}
+    def handler(request):
+        body = {"results": [{"id": 1, **{**entry, "clean_title": "Amul Butter 500g Pack"}}, {"id": 0, **entry}]}
+        return httpx.Response(200, json={"choices": [{"message": {"content": json.dumps(body)}}]})
+    provider = GroqLLMProvider(api_key="test", transport=httpx.MockTransport(handler))
+    results = await provider.enrich_batch([("Amul butter 500g", None), ("Amul butter pack 500g", None)])
+    assert results[0]["clean_title"] == "Amul Butter 500g"
+    assert results[1]["clean_title"] == "Amul Butter 500g Pack"
+    await provider.aclose()
 
 
 @pytest.mark.asyncio
@@ -111,6 +125,7 @@ def test_groq_system_prompt_matches_contract_exactly():
         "- category: exactly one of: Groceries, Beverages, Personal Care, Household, Electronics, Fashion, Home & Kitchen, Other\n"
         "- brand: the brand name as a string, or null if you cannot determine it\n"
         "- tags: up to 5 lowercase single-word strings describing the product\n"
+            "- confidence: a number from 0 to 1 estimating confidence (uncertain outputs should be below 0.85)\n"
         "Return ONLY the JSON object. No markdown fences. No explanation."
     )
 
@@ -118,10 +133,13 @@ def test_groq_system_prompt_matches_contract_exactly():
 def test_factory_selects_groq_and_mock(monkeypatch):
     monkeypatch.setattr(settings, "GROQ_API_KEY", "test-key")
     monkeypatch.setattr(settings, "LLM_PROVIDER", "groq")
-    assert isinstance(get_llm_provider(), GroqLLMProvider)
+    from app.llm.batching import BatchingProvider
+    assert isinstance(get_llm_provider(), BatchingProvider)
+    assert isinstance(get_llm_provider().provider.primary, GroqLLMProvider)
 
     monkeypatch.setattr(settings, "LLM_PROVIDER", "mock")
-    assert isinstance(get_llm_provider(), MockLLMProvider)
+    assert isinstance(get_llm_provider(), BatchingProvider)
+    assert isinstance(get_llm_provider().provider, MockLLMProvider)
 
 
 def test_factory_rejects_unknown_provider(monkeypatch):

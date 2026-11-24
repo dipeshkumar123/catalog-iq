@@ -136,6 +136,16 @@
                 <option value="Other">Other</option>
               </select>
             </div>
+            <div class="filter-group category-filter">
+              <label for="status-filter" class="form-label">Status</label>
+              <select id="status-filter" class="form-select">
+                <option value="">All statuses</option>
+                <option value="pending_review">Pending review</option>
+                <option value="enriched">Enriched</option>
+                <option value="approved">Approved</option>
+                <option value="failed">Failed</option>
+              </select>
+            </div>
           </div>
 
           <div class="table-responsive">
@@ -196,12 +206,20 @@
                     <dd id="raw-title" class="meta-def"></dd>
                   </div>
                   <div class="meta-item">
+                    <dt class="meta-term">Title diff</dt>
+                    <dd id="review-diff" class="meta-def"></dd>
+                  </div>
+                  <div class="meta-item">
                     <dt class="meta-term">Raw Description</dt>
                     <dd id="raw-description" class="meta-def text-muted"></dd>
                   </div>
                   <div class="meta-item">
                     <dt class="meta-term">Current Status</dt>
                     <dd id="raw-status-container" class="meta-def"></dd>
+                  </div>
+                  <div class="meta-item">
+                    <dt class="meta-term">Quality checks</dt>
+                    <dd id="review-quality" class="meta-def"></dd>
                   </div>
                 </dl>
               </div>
@@ -227,6 +245,10 @@
                       <option value="Home & Kitchen">Home & Kitchen</option>
                       <option value="Other">Other</option>
                     </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="edit-brand" class="form-label">Brand</label>
+                    <input type="text" id="edit-brand" class="form-input" maxlength="120">
                   </div>
 
                   <div class="form-group">

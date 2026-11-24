@@ -80,6 +80,17 @@ async def test_post_job_empty_list(client: httpx.AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_post_job_duplicate_sku_is_rejected_atomically(client: httpx.AsyncClient):
+    res = await client.post("/api/jobs", json={"products": [
+        {"sku": "DUP-1", "raw_title": "First item"},
+        {"sku": "DUP-1", "raw_title": "Second item"},
+    ]})
+    assert res.status_code == 400
+    assert "Duplicate SKU" in res.json()["error"]
+    assert await db_manager.fetch_one("SELECT id FROM jobs") is None
+
+
+@pytest.mark.asyncio
 async def test_post_job_missing_sku(client: httpx.AsyncClient):
     """POST /api/jobs with product missing SKU -> 400 {"error": ...}."""
     res = await client.post(
@@ -186,6 +197,37 @@ async def test_get_products_after_enrichment(client: httpx.AsyncClient):
     assert item["sku"] == "SKU-MANUAL-1"
     assert item["clean_title"] == "Amul Butter"
     assert item["tags"] == ["dairy"]
+
+
+@pytest.mark.asyncio
+async def test_product_search_includes_brand_tags_and_cursor(client: httpx.AsyncClient):
+    await db_manager.execute_write("INSERT INTO jobs (id,status,total) VALUES ('j_search','completed',3)")
+    rows = [
+        ("A-01", "j_search", "Amul butter", "Clean Butter", "Groceries", "Amul", '["dairy"]', "enriched", "h1"),
+        ("A-02", "j_search", "Milk item", "Clean Milk", "Groceries", "OtherBrand", '["amul"]', "pending_review", "h2"),
+        ("A-03", "j_search", "Other listing", "Other Clean", "Other", None, "[]", "enriched", "h3"),
+    ]
+    await db_manager.execute_write_many(
+        "INSERT INTO products(sku,job_id,raw_title,clean_title,category,brand,tags,status,content_hash) VALUES(?,?,?,?,?,?,?,?,?)", rows
+    )
+    res = await client.get("/api/products?q=amul")
+    assert res.status_code == 200
+    assert {item["sku"] for item in res.json()["items"]} == {"A-01", "A-02"}
+    review = await client.get("/api/products?status=pending_review")
+    assert [item["sku"] for item in review.json()["items"]] == ["A-02"]
+    first = await client.get("/api/products?page_size=1")
+    assert first.json()["next_cursor"] == "A-01"
+    second = await client.get("/api/products?page_size=1&cursor=A-01")
+    assert second.json()["items"][0]["sku"] == "A-02"
+    last = await client.get("/api/products?page_size=1&cursor=A-02")
+    assert last.json()["items"][0]["sku"] == "A-03"
+    assert last.json()["next_cursor"] is None
+
+
+@pytest.mark.asyncio
+async def test_invalid_status_filter_rejected(client: httpx.AsyncClient):
+    res = await client.get("/api/products?status=processing")
+    assert res.status_code == 400
 
 
 @pytest.mark.asyncio

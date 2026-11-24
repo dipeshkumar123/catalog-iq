@@ -518,3 +518,5 @@ body {
     grid-template-columns: 1fr 1fr; /* True side-by-side comparison on desktop */
   }
 }
+.meta-def del { background: #fee2e2; color: #991b1b; text-decoration: line-through; }
+.meta-def ins { background: #dcfce7; color: #166534; text-decoration: none; }

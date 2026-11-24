@@ -1,7 +1,8 @@
 """Base abstract interface for LLM providers."""
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+import asyncio
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 class BaseLLMProvider(ABC):
@@ -27,3 +28,7 @@ class BaseLLMProvider(ABC):
             LLMValidationError: If the enrichment violates validation rules.
         """
         pass
+
+    async def enrich_batch(self, products: Sequence[Tuple[str, Optional[str]]]) -> List[Dict[str, Any]]:
+        """Default compatibility path; batch-aware providers override this method."""
+        return await asyncio.gather(*(self.enrich(title, description) for title, description in products))

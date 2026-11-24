@@ -1,6 +1,8 @@
 """Output validation logic for LLM enrichment responses."""
 
 import json
+import math
+import re
 from typing import Any, Dict, Set
 from app.core.exceptions import LLMValidationError
 
@@ -46,10 +48,17 @@ def validate_enrichment(data: Any) -> Dict[str, Any]:
     if not isinstance(data, dict):
         raise LLMValidationError(f"Expected dictionary output, got {type(data).__name__}")
 
+    allowed_keys = {"clean_title", "category", "brand", "tags", "confidence"}
+    extras = set(data) - allowed_keys
+    if extras:
+        raise LLMValidationError(f"Unexpected fields: {sorted(extras)}")
+
     # 3. Validate clean_title
     clean_title = data.get("clean_title")
     if not isinstance(clean_title, str) or not clean_title.strip():
         raise LLMValidationError("clean_title must be a non-empty string.")
+    if len(clean_title.strip()) < 5 or len(clean_title.strip()) > 100:
+        raise LLMValidationError("clean_title must be between 5 and 100 characters.")
 
     # 4. Validate category
     category = data.get("category")
@@ -83,11 +92,18 @@ def validate_enrichment(data: Any) -> Dict[str, Any]:
         if trimmed != trimmed.lower():
             raise LLMValidationError(f"Tag '{trimmed}' must be lowercase.")
         if trimmed:
+            if not re.fullmatch(r"[\w]+(?:[-'][\w]+)*", trimmed, flags=re.UNICODE):
+                raise LLMValidationError(f"Tag '{trimmed}' must be a single word.")
             sanitized_tags.append(trimmed)
+
+    confidence = data.get("confidence")
+    if confidence is not None and (isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1):
+        raise LLMValidationError("confidence must be a finite number between 0 and 1.")
 
     return {
         "clean_title": clean_title.strip(),
         "category": category,
         "brand": clean_brand,
         "tags": sanitized_tags,
+        "confidence": float(confidence) if confidence is not None else None,
     }

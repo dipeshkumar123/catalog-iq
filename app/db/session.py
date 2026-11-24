@@ -78,6 +78,18 @@ class DatabaseManager:
             await db.commit()
             return cursor.lastrowid
 
+    async def execute_dml(
+        self,
+        query: str,
+        parameters: Union[Sequence[Any], Dict[str, Any]] = (),
+    ) -> int:
+        """Executes a write and returns affected row count for atomic claims."""
+        async with self.write_lock:
+            db = await self.get_connection()
+            cursor = await db.execute(query, parameters)
+            await db.commit()
+            return cursor.rowcount
+
     async def execute_write_many(
         self,
         query: str,

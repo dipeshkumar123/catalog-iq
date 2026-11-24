@@ -1,6 +1,7 @@
 """Groq Chat Completions provider using the shared enrichment contract."""
 
-from typing import Any, Dict, Optional
+import json
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import httpx
 
@@ -16,6 +17,7 @@ SYSTEM_PROMPT = (
     "- category: exactly one of: Groceries, Beverages, Personal Care, Household, Electronics, Fashion, Home & Kitchen, Other\n"
     "- brand: the brand name as a string, or null if you cannot determine it\n"
     "- tags: up to 5 lowercase single-word strings describing the product\n"
+    "- confidence: a number from 0 to 1 estimating confidence (uncertain outputs should be below 0.85)\n"
     "Return ONLY the JSON object. No markdown fences. No explanation."
 )
 
@@ -25,7 +27,7 @@ class GroqLLMProvider(BaseLLMProvider):
 
     def __init__(
         self,
-        model: str = "openai/gpt-oss-120b",
+        model: Optional[str] = None,
         *,
         api_key: Optional[str] = None,
         transport: Optional[httpx.AsyncBaseTransport] = None,
@@ -34,7 +36,7 @@ class GroqLLMProvider(BaseLLMProvider):
         if not key or not key.strip():
             raise LLMError("GROQ_API_KEY is not set")
         self.api_key = key.strip()
-        self.model = model
+        self.model = model or settings.GROQ_MODEL
         self._transport = transport
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -95,3 +97,42 @@ class GroqLLMProvider(BaseLLMProvider):
             raise LLMError(f"Groq response was malformed: {exc}") from exc
 
         return validate_enrichment(content)
+
+    async def enrich_batch(self, products: Sequence[Tuple[str, Optional[str]]]) -> List[Dict[str, Any]]:
+        if len(products) <= 1:
+            return [await self.enrich(*products[0])] if products else []
+        user_content = json.dumps([{"id": i, "title": title, "description": desc or ""} for i, (title, desc) in enumerate(products)])
+        prompt = SYSTEM_PROMPT + " Return one JSON object with exactly one key 'results', an array containing one object per input with integer id and the standard enrichment fields. Preserve each id."
+        payload = {"model": self.model, "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": user_content},
+        ], "temperature": 0, "response_format": {"type": "json_object"}}
+        try:
+            response = await self._get_client().post(GROQ_CHAT_COMPLETIONS_URL,
+                headers={"Authorization": f"Bearer {self.api_key}"}, json=payload)
+        except httpx.TimeoutException as exc:
+            raise LLMError("Groq timeout") from exc
+        except httpx.RequestError as exc:
+            raise LLMError(f"Groq request error: {exc}") from exc
+        if response.status_code in (429, 500, 503):
+            raise LLMError(f"Groq transient provider error: {response.status_code}")
+        if response.status_code != 200:
+            raise LLMError(f"Groq provider error: {response.status_code}")
+        try:
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            decoded = json.loads(content) if isinstance(content, str) else content
+            entries = decoded["results"]
+            if not isinstance(entries, list) or len(entries) != len(products):
+                raise ValueError("result count mismatch")
+            by_id = {}
+            for entry in entries:
+                if not isinstance(entry, dict) or isinstance(entry.get("id"), bool) or not isinstance(entry.get("id"), int) or entry["id"] in by_id:
+                    raise ValueError("invalid or duplicate result id")
+                item = {k: v for k, v in entry.items() if k != "id"}
+                by_id[entry["id"]] = validate_enrichment(item)
+            if set(by_id) != set(range(len(products))):
+                raise ValueError("missing result id")
+            return [by_id[i] for i in range(len(products))]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise LLMError(f"Groq batch response was malformed: {exc}") from exc

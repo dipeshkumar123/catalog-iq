@@ -103,6 +103,7 @@ class MockLLMProvider(BaseLLMProvider):
             "category": category,
             "brand": brand,
             "tags": tags,
+            "confidence": 0.92,
         }
 
         if validate:

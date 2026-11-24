@@ -5,9 +5,11 @@ import hashlib
 import json
 import logging
 import re
+import os
 from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
 
 from app.core.utils import now_iso
+from app.core.config import settings
 from app.db.session import DatabaseManager, db_manager
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,38 @@ class DedupManager:
         self.db_manager = manager or db_manager
         self.metrics = metrics
         self._in_flight: Dict[str, asyncio.Future] = {}
+        self._redis = None
+
+    async def _get_redis(self):
+        if self._redis is None and settings.REDIS_URL:
+            from redis.asyncio import Redis
+            self._redis = Redis.from_url(settings.REDIS_URL, decode_responses=True)
+        return self._redis
+
+    async def _redis_read(self, key: str) -> Optional[Dict[str, Any]]:
+        if not settings.REDIS_URL:
+            return None
+        try:
+            client = await self._get_redis()
+            value = await client.get(f"catalogiq:cache:{key}")
+            return json.loads(value) if value else None
+        except Exception as exc:
+            logger.warning("Redis cache read failed; using SQLite: %s", exc)
+            return None
+
+    async def _redis_write(self, key: str, value: Dict[str, Any]) -> None:
+        if not settings.REDIS_URL:
+            return
+        try:
+            client = await self._get_redis()
+            await client.setex(f"catalogiq:cache:{key}", max(1, settings.REDIS_CACHE_TTL_SECONDS), json.dumps(value))
+        except Exception as exc:
+            logger.warning("Redis cache write failed; SQLite remains authoritative: %s", exc)
+
+    async def aclose(self) -> None:
+        if self._redis is not None:
+            await self._redis.aclose()
+            self._redis = None
 
     @property
     def in_flight(self) -> Dict[str, asyncio.Future]:
@@ -70,14 +104,16 @@ class DedupManager:
         # =========================================================================
         # 1. PERSISTENT CACHE CHECK (SQLite dedup_cache)
         # =========================================================================
-        cached = await self.db_manager.fetch_one(
+        cached = await self._redis_read(content_hash_key)
+        if not cached:
+            cached = await self.db_manager.fetch_one(
             """
-            SELECT clean_title, category, brand, tags
+            SELECT clean_title, category, brand, tags, confidence, review_reasons
             FROM dedup_cache
             WHERE content_hash = :content_hash
             """,
             {"content_hash": content_hash_key},
-        )
+            )
         if cached:
             # Parse tags JSON string into list if necessary
             tags_val = cached.get("tags")
@@ -86,6 +122,12 @@ class DedupManager:
                     cached["tags"] = json.loads(tags_val)
                 except Exception:
                     cached["tags"] = []
+            reasons_val = cached.get("review_reasons")
+            if isinstance(reasons_val, str):
+                try:
+                    cached["review_reasons"] = json.loads(reasons_val)
+                except Exception:
+                    cached["review_reasons"] = []
 
             if on_cache_hit:
                 res = on_cache_hit()
@@ -146,8 +188,8 @@ class DedupManager:
             tags_json = json.dumps(result.get("tags", []))
             await self.db_manager.execute_write(
                 """
-                INSERT OR REPLACE INTO dedup_cache (content_hash, clean_title, category, brand, tags, created_at)
-                VALUES (:content_hash, :clean_title, :category, :brand, :tags, :created_at)
+                INSERT OR REPLACE INTO dedup_cache (content_hash, clean_title, category, brand, tags, confidence, review_reasons, created_at)
+                VALUES (:content_hash, :clean_title, :category, :brand, :tags, :confidence, :review_reasons, :created_at)
                 """,
                 {
                     "content_hash": content_hash_key,
@@ -155,9 +197,12 @@ class DedupManager:
                     "category": result["category"],
                     "brand": result.get("brand"),
                     "tags": tags_json,
+                    "confidence": result.get("confidence"),
+                    "review_reasons": json.dumps(result.get("review_reasons", [])),
                     "created_at": now_iso(),
                 },
             )
+            await self._redis_write(content_hash_key, result)
 
             # 2. Unblock all follower futures
             if not fut.done():

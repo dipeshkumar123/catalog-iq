@@ -57,20 +57,28 @@ Upload a CSV, then CatalogIQ runs parallel LLM enrichment with persistent and in
 Create an account at [Groq Console](https://console.groq.com) and create an API key under **API Keys**. Set the key and provider in your shell:
 
 ```bash
-export GROQ_API_KEY=gsk_...
+export GROQ_API_KEY=your_groq_api_key_here
 export LLM_PROVIDER=groq
 ```
 
 In PowerShell:
 
 ```powershell
-$env:GROQ_API_KEY="gsk_..."
+$env:GROQ_API_KEY="your_groq_api_key_here"
 $env:LLM_PROVIDER="groq"
 ```
 
 Alternatively, set these in `.env`, then restart with `uvicorn app.main:app --reload`. Verify `GET /api/health` reports `"llm_provider":"groq"`. Submit a small job and inspect the title, category, brand, and tags returned by the [Groq provider](app/llm/groq.py); output is checked by the [shared validator](app/llm/validator.py).
 
-**Note:** the brief lists `llama-3.3-70b-versatile` as the recommended model, but Groq deprecated it for free and developer tiers on 2026-08-16 ([Groq deprecation notice](https://console.groq.com/docs/deprecations)). This project defaults to `openai/gpt-oss-120b`. The model is configurable through `GroqLLMProvider(model=...)`; a `GROQ_MODEL` environment override is not currently wired in [settings](app/core/config.py).
+### Optional Gemini fallback
+
+Set `GEMINI_API_KEY` in the shell or `.env`. With `LLM_PROVIDER=groq`, Groq remains primary and Gemini is used for transient rate-limit, overload, or timeout failures. `GEMINI_MODEL` defaults to `gemini-3.5-flash-lite`; set `LLM_FALLBACK_PROVIDER=none` to disable fallback. `LLM_COMPLEX_PROVIDER=gemini` routes long titles or description-heavy listings to Gemini. Keys stay in environment configuration and are never sent to the browser.
+
+### Optional Redis services
+
+Install dependencies with `pip install -r requirements.txt`, then set `REDIS_URL` to a reachable Redis endpoint before starting the app. Redis Streams supplies the cross-process job queue, and Redis caches deduplicated enrichment results. Set `LLM_RATE_LIMIT_RPM` and/or `LLM_RATE_LIMIT_TPM` to enable a shared token bucket; zero disables that limit. Startup checks Redis connectivity and creates the consumer group. Without `REDIS_URL`, the local asyncio queue and SQLite cache remain in use.
+
+**Note:** the brief lists `llama-3.3-70b-versatile` as the recommended model, but Groq deprecated it for free and developer tiers on 2026-08-16 ([Groq deprecation notice](https://console.groq.com/docs/deprecations)). This project defaults to `openai/gpt-oss-120b`; override it with `GROQ_MODEL`.
 
 Groq limits depend on the model and account tier; check [current limits](https://console.groq.com/docs/rate-limits) and the Console before larger runs. `LLM_CONCURRENCY=5` limits concurrent requests; reduce it to `3` if you see 429 responses.
 
@@ -79,7 +87,7 @@ Groq limits depend on the model and account tier; check [current limits](https:/
 - `asyncio.Semaphore` bounds concurrent provider calls within this process ([singletons](app/core/singletons.py), [worker](app/pipeline/worker.py)).
 - Normalized title/description hashes use persistent cache hits and in-flight futures to coalesce duplicate work ([dedup manager](app/pipeline/dedup.py)).
 - Transient provider errors and invalid output receive up to four total attempts with exponential backoff and jitter ([retry wrapper](app/pipeline/retry.py)).
-- The validator enforces a non-empty title, allowed category, valid brand type, and at most five lowercase tags ([validator](app/llm/validator.py), [validator tests](tests/test_llm.py)).
+- The validator enforces exact fields, title bounds, allowed categories, brand type, single-word lowercase tags, and finite confidence values; quality gates route uncertain listings to review ([validator](app/llm/validator.py), [quality checks](app/llm/quality.py)).
 - SQLite WAL stores jobs and product state; startup resets interrupted products and requeues their jobs ([database recovery](app/db/init_db.py), [recovery tests](tests/test_crash_recovery.py)).
 
 See [DESIGN.md](DESIGN.md) for the trade-offs, limitations, and scaling plan.
@@ -126,17 +134,17 @@ The user message appends `Title: {raw_title}` and `Description: {raw_description
 
 1. **Content normalization:** dedup uses `lowercase(raw_title + " " + raw_description)` with whitespace collapse; the delimiter is one space per the [assignment PDF](CatalogIQ_Internship_Assignment.pdf), and the prompt's inline `|` was treated as a typo ([implementation](app/pipeline/dedup.py), [tests](tests/test_dedup.py)).
 2. **Global persistent cache:** a product enriched in Job A can be a cache hit in Job B because cache keys are content hashes, not job IDs ([schema](app/db/init_db.py), [dedup manager](app/pipeline/dedup.py)).
-3. **Terminal catalogue results:** `GET /api/products` returns `enriched`, `failed`, and `approved`; `pending` and `in_progress` are represented through job progress ([route](app/api/routes.py)).
+3. **Terminal catalogue results:** `GET /api/products` returns `enriched`, `pending_review`, `failed`, and `approved`; `pending` and `in_progress` are represented through job progress ([route](app/api/routes.py)).
 4. **SKU resubmission:** upserting an existing SKU resets it to `pending` and clears enrichment and approval fields, including when raw content changes ([job route](app/api/routes.py)).
 5. **Cache-hit recovery:** `done` and `failed` are recalculated after a crash, but `cache_hits` retains its last persisted value ([recovery](app/db/init_db.py)).
 6. **Follower failures:** in-flight duplicates inherit the leader's terminal failure rather than independently retrying ([dedup manager](app/pipeline/dedup.py), [pipeline tests](tests/test_dedup.py)).
 7. **Page size:** values above 100 are clamped to 100 instead of rejected ([products route](app/api/routes.py)).
 8. **Job IDs:** IDs use `j_` plus eight hexadecimal characters via `secrets.token_hex(4)` ([job route](app/api/routes.py)).
 
-## What's unfinished / would do with more time
+## Remaining deployment limits
 
-- **Frontend:** Catalogue has no status filter; it supports text search and category. Search uses `LIKE '%q%'`, adequate for the demo but requiring FTS5 or equivalent at five million rows ([route](app/api/routes.py), [design](DESIGN.md)).
-- **Scale:** the queue, semaphore, and in-flight map are process-local. Multi-worker deployment needs distributed coordination such as Redis ([singletons](app/core/singletons.py), [dedup manager](app/pipeline/dedup.py), [design](DESIGN.md)).
+- **Storage scale:** FTS5, keyset pagination, and category/SKU indexes are in place. SQLite is still a single-node database; multi-host production should move product/job state to a shared database such as PostgreSQL.
+- **Distributed workers:** Redis Streams distributes jobs and the Redis cache/rate limiter coordinates provider usage. Semaphore and in-flight request coalescing remain process-local; Redis queue delivery is at least once, with SQLite job claims preventing duplicate execution.
 - **Observability:** metrics are in-memory; there is no structured logging pipeline or Prometheus export ([metrics](app/core/metrics.py)).
 - **Retry:** backoff is exponential from 200ms with jitter, not provider-rate-aware ([retry wrapper](app/pipeline/retry.py)).
 - **Frontend build:** there is no bundler or minification; the plain files are served directly by design ([static serving](app/main.py), [frontend](frontend/index.html)).

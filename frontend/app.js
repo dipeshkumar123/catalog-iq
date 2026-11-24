@@ -20,6 +20,8 @@
   let lastProgressKey = '';
 
   let currentPage = 1;
+  let cursorStack = [];
+  let nextCursor = null;
   const pageSize = 20;
   let debounceSearchTimer = null;
   let currentReviewProduct = null;
@@ -45,6 +47,7 @@
 
   const searchInput = document.getElementById('search-input');
   const categoryFilter = document.getElementById('category-filter');
+  const statusFilter = document.getElementById('status-filter');
   const productsTable = document.getElementById('products-table');
   const productsTbody = document.getElementById('products-tbody');
   const catalogueEmpty = document.getElementById('catalogue-empty');
@@ -57,12 +60,15 @@
   const reviewErrorAlert = document.getElementById('review-error-alert');
   const rawSku = document.getElementById('raw-sku');
   const rawTitle = document.getElementById('raw-title');
+  const reviewDiff = document.getElementById('review-diff');
   const rawDescription = document.getElementById('raw-description');
   const rawStatusContainer = document.getElementById('raw-status-container');
   const reviewForm = document.getElementById('review-form');
   const editTitle = document.getElementById('edit-title');
   const editCategory = document.getElementById('edit-category');
+  const editBrand = document.getElementById('edit-brand');
   const editTags = document.getElementById('edit-tags');
+  const reviewQuality = document.getElementById('review-quality');
   const reviewFormError = document.getElementById('review-form-error');
   const btnCancelReview = document.getElementById('btn-cancel');
 
@@ -328,6 +334,8 @@
     clearTimeout(debounceSearchTimer);
     debounceSearchTimer = setTimeout(() => {
       currentPage = 1;
+      cursorStack = [];
+      nextCursor = null;
       fetchCatalogue();
     }, 300);
   });
@@ -337,37 +345,51 @@
       clearTimeout(debounceSearchTimer);
       searchInput.value = '';
       currentPage = 1;
+      cursorStack = [];
+      nextCursor = null;
       fetchCatalogue();
     }
   });
 
   categoryFilter.addEventListener('change', () => {
     currentPage = 1;
+    cursorStack = [];
+    nextCursor = null;
+    fetchCatalogue();
+  });
+
+  statusFilter.addEventListener('change', () => {
+    currentPage = 1;
+    cursorStack = [];
+    nextCursor = null;
     fetchCatalogue();
   });
 
   btnPrevPage.addEventListener('click', () => {
     if (currentPage > 1) {
       currentPage--;
+      cursorStack.pop();
       fetchCatalogue();
     }
   });
 
   btnNextPage.addEventListener('click', () => {
-    currentPage++;
-    fetchCatalogue();
+    if (nextCursor) {
+      cursorStack.push(nextCursor);
+      currentPage++;
+      fetchCatalogue();
+    }
   });
 
   async function fetchCatalogue() {
     const q = searchInput.value.trim();
     const category = categoryFilter.value;
 
-    const params = new URLSearchParams({
-      page: currentPage.toString(),
-      page_size: pageSize.toString(),
-    });
+    const params = new URLSearchParams({ page: '1', page_size: pageSize.toString() });
     if (q) params.set('q', q);
     if (category) params.set('category', category);
+    if (statusFilter.value) params.set('status', statusFilter.value);
+    if (cursorStack.length) params.set('cursor', cursorStack[cursorStack.length - 1]);
 
     try {
       const res = await apiFetch(`/api/products?${params.toString()}`);
@@ -376,6 +398,7 @@
         throw new Error(err.error || 'Failed to fetch catalogue.');
       }
       const data = await res.json();
+      nextCursor = data.next_cursor || null;
       renderCatalogue(data);
     } catch (err) {
       showToast(err.message, 'error');
@@ -386,11 +409,9 @@
     productsTbody.innerHTML = '';
     const items = data.items || [];
     const total = data.total || 0;
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-
-    pageInfo.textContent = `Page ${data.page} of ${totalPages} (${total} total)`;
-    btnPrevPage.disabled = data.page <= 1;
-    btnNextPage.disabled = data.page >= totalPages;
+    pageInfo.textContent = `Page ${currentPage} (${total} total)`;
+    btnPrevPage.disabled = currentPage <= 1;
+    btnNextPage.disabled = !nextCursor;
 
     if (items.length === 0) {
       catalogueEmpty.classList.remove('hidden');
@@ -487,10 +508,36 @@
 
     // Right column: Editable cleaned inputs
     editTitle.value = product.clean_title || product.raw_title || '';
+    renderTitleDiff(product.raw_title || '', editTitle.value);
     editCategory.value = product.category || 'Other';
+    editBrand.value = product.brand || '';
     editTags.value = Array.isArray(product.tags) ? product.tags.join(', ') : '';
+    reviewQuality.textContent = `${product.confidence == null ? 'Confidence unavailable' : `Confidence ${Math.round(product.confidence * 100)}%`}${product.review_reasons && product.review_reasons.length ? ` · ${product.review_reasons.join(', ')}` : ' · No review flags'}`;
 
   }
+
+  function renderTitleDiff(raw, clean) {
+    reviewDiff.replaceChildren();
+    const rawTokens = raw.split(/(\s+)/);
+    const cleanSet = new Set(clean.toLocaleLowerCase().split(/\s+/));
+    rawTokens.forEach(token => {
+      if (!token) return;
+      const node = document.createElement(cleanSet.has(token.toLocaleLowerCase()) || /^\s+$/.test(token) ? 'span' : 'del');
+      node.textContent = token;
+      reviewDiff.appendChild(node);
+    });
+    const rawSet = new Set(raw.toLocaleLowerCase().split(/\s+/));
+    clean.split(/(\s+)/).forEach(token => {
+      if (!token || /^\s+$/.test(token) || rawSet.has(token.toLocaleLowerCase())) return;
+      const node = document.createElement('ins');
+      node.textContent = ` ${token}`;
+      reviewDiff.appendChild(node);
+    });
+  }
+
+  editTitle.addEventListener('input', () => {
+    if (currentReviewProduct) renderTitleDiff(currentReviewProduct.raw_title || '', editTitle.value);
+  });
 
   reviewForm.addEventListener('submit', async e => {
     e.preventDefault();
@@ -531,6 +578,7 @@
         body: JSON.stringify({
           clean_title: titleVal,
           category: categoryVal,
+          brand: editBrand.value.trim() || null,
           tags: tagsArr,
         }),
       });

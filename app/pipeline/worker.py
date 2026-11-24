@@ -17,6 +17,7 @@ from app.core.utils import now_iso
 from app.db.session import DatabaseManager, db_manager
 from app.pipeline.dedup import content_hash
 from app.pipeline.retry import with_retry
+from app.llm.quality import assess_enrichment_quality
 
 logger = logging.getLogger(__name__)
 
@@ -58,29 +59,36 @@ async def _finalize_product(
     target_db = db or db_manager
 
     if not failed and result is not None:
+        reasons = result.get("review_reasons", [])
+        result["review_reasons"] = reasons
+        target_status = "pending_review" if reasons else "enriched"
         tags_json = json.dumps(result.get("tags", []))
         await target_db.execute_write(
             """
             UPDATE products
-            SET status = 'enriched',
+            SET status = :status,
                 clean_title = :clean_title,
                 category = :category,
                 brand = :brand,
                 tags = :tags,
                 error = NULL,
+                confidence = :confidence,
+                review_reasons = :review_reasons,
                 updated_at = :updated_at
             WHERE sku = :sku
             """,
             {
                 "sku": sku,
+                "status": target_status,
                 "clean_title": result["clean_title"],
                 "category": result["category"],
                 "brand": result.get("brand"),
                 "tags": tags_json,
+                "confidence": result.get("confidence"),
+                "review_reasons": json.dumps(reasons),
                 "updated_at": now_iso(),
             },
         )
-
         if job_id in job_counters:
             job_counters[job_id]["done"] += 1
             if was_cache_hit:
@@ -104,6 +112,12 @@ async def _finalize_product(
 
         if job_id in job_counters:
             job_counters[job_id]["failed"] += 1
+
+    try:
+        from app.api.routes import invalidate_product_search_cache
+        invalidate_product_search_cache()
+    except Exception:
+        pass
 
     # Batch flush every 25 products to minimize database write frequency
     if job_id in job_counters:
@@ -144,7 +158,19 @@ async def process_one_product(
     # 3. Deduplication: Persistent check -> In-flight -> Leader computation
     dedup = get_dedup_manager()
     try:
-        result, was_cache_hit = await dedup.get_or_compute(h, compute_fn)
+        async def enrich_with_quality():
+            result = await compute_fn()
+            return result
+        result, was_cache_hit = await dedup.get_or_compute(h, enrich_with_quality)
+        result["review_reasons"] = assess_enrichment_quality(
+            raw_title, raw_desc, result,
+            confidence_threshold=settings.LLM_REVIEW_CONFIDENCE_THRESHOLD,
+        )
+        if was_cache_hit:
+            await target_db.execute_write(
+                "UPDATE dedup_cache SET confidence=:confidence, review_reasons=:reasons WHERE content_hash=:hash",
+                {"confidence": result.get("confidence"), "reasons": json.dumps(result["review_reasons"]), "hash": h},
+            )
         await _finalize_product(job_id, sku, result, was_cache_hit=was_cache_hit, db=target_db)
     except RetryExhaustedError as e:
         logger.warning("Product '%s' retry attempts exhausted: %s", sku, e)
@@ -159,15 +185,18 @@ async def process_job(job_id: str, db: Optional[DatabaseManager] = None) -> None
     target_db = db or db_manager
     logger.info("Starting processing for job '%s'.", job_id)
 
-    # Mark job as running
-    await target_db.execute_write(
+    # Atomically claim only queued jobs. Redis Streams delivery is at least once;
+    # the DB claim keeps duplicate/recovered messages from running simultaneously.
+    claimed = await target_db.execute_dml(
         """
-        UPDATE jobs
-        SET status = 'running', started_at = :started_at
-        WHERE id = :id AND started_at IS NULL
+        UPDATE jobs SET status='running', started_at=COALESCE(started_at,:started_at)
+        WHERE id=:id AND status='queued'
         """,
         {"id": job_id, "started_at": now_iso()},
     )
+    if claimed != 1:
+        logger.info("Job '%s' is no longer queued; duplicate delivery ignored.", job_id)
+        return
 
     # Initialize or load in-memory counters
     job_row = await target_db.fetch_one(

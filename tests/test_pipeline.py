@@ -165,7 +165,7 @@ async def test_b_retry_counting(pipeline_env):
 
     # Product successfully enriched
     prod = await manager.fetch_one("SELECT * FROM products WHERE sku = 'SKU-FLAKY-1'")
-    assert prod["status"] == "enriched"
+    assert prod["status"] == "pending_review"  # confidence is missing from this test provider
     assert prod["clean_title"] == "Flaky Product Recovered"
 
     job = await manager.fetch_one("SELECT * FROM jobs WHERE id = :id", {"id": job_id})

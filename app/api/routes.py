@@ -1,7 +1,9 @@
 """REST API route controllers for CatalogIQ."""
 
 import json
+import re
 import secrets
+import time
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -18,6 +20,12 @@ from app.db.session import db_manager
 from app.llm.validator import ALLOWED_CATEGORIES
 from app.pipeline.dedup import content_hash
 from app.pipeline.queue import enqueue_job
+
+_product_search_cache: Dict[tuple, tuple[float, Any]] = {}
+
+
+def invalidate_product_search_cache() -> None:
+    _product_search_cache.clear()
 
 router = APIRouter(prefix="/api")
 
@@ -63,6 +71,7 @@ async def create_job(request: Request):
 
     # Validate all product listings before any DB operations
     prepared_rows: List[tuple] = []
+    seen_skus = set()
     now_ts = now_iso()
     job_id = "j_" + secrets.token_hex(4)
 
@@ -79,6 +88,9 @@ async def create_job(request: Request):
             raise InvalidProductDataError(f"Product '{sku}' is missing required 'raw_title'.")
 
         clean_sku = str(sku).strip()
+        if clean_sku in seen_skus:
+            raise InvalidProductDataError(f"Duplicate SKU '{clean_sku}' in products list.")
+        seen_skus.add(clean_sku)
         clean_raw_title = str(raw_title).strip()
         raw_desc = item.get("raw_description")
         clean_raw_desc = str(raw_desc).strip() if raw_desc is not None and str(raw_desc).strip() else None
@@ -123,12 +135,15 @@ async def create_job(request: Request):
             brand = NULL,
             tags = NULL,
             error = NULL,
+            confidence = NULL,
+            review_reasons = '[]',
             attempts = 0,
             content_hash = excluded.content_hash,
             updated_at = excluded.updated_at
         """,
         prepared_rows,
     )
+    invalidate_product_search_cache()
 
     # 3. Non-blocking enqueue to background worker
     await enqueue_job(job_id)
@@ -169,6 +184,8 @@ async def list_products(
     page_size: str = Query("20"),
     category: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    cursor: Optional[str] = Query(None),
 ):
     """Lists enriched, approved, and failed products with pagination and search filters."""
     # Validate page
@@ -190,38 +207,40 @@ async def list_products(
         page_size_num = 100  # Clamp to max 100
 
     offset = (page_num - 1) * page_size_num
-    q_param = f"%{q.strip()}%" if q and q.strip() else None
+    terms = re.findall(r"[\w]+", q or "", flags=re.UNICODE)
+    fts_query = " AND ".join('"' + token.replace('"', '""') + '"' for token in terms) or None
+    if status and status not in {"enriched", "pending_review", "failed", "approved"}:
+        raise HTTPException(status_code=400, detail="Invalid product status filter.")
+    cache_key = (q or "", category or "", status or "", cursor or "", page_num, page_size_num)
+    cached = _product_search_cache.get(cache_key)
+    if cached and cached[0] > time.monotonic():
+        return cached[1]
+    allowed_statuses = [status] if status else ["enriched", "pending_review", "failed", "approved"]
+    status_placeholders = ",".join(f":status{i}" for i in range(len(allowed_statuses)))
+    cursor_sql = " AND p.sku > :cursor" if cursor else ""
 
     # Only return products in terminal statuses (enriched, failed, approved)
-    where_sql = """
-        status IN ('enriched', 'failed', 'approved')
-        AND (:category IS NULL OR category = :category)
-        AND (:q IS NULL OR clean_title LIKE :q OR raw_title LIKE :q)
-    """
-    params = {
-        "category": category,
-        "q": q_param,
-        "limit": page_size_num,
-        "offset": offset,
-    }
+    base_where_sql = f"p.status IN ({status_placeholders}) AND (:category IS NULL OR p.category = :category) AND (:fts IS NULL OR p.rowid IN (SELECT rowid FROM products_fts WHERE products_fts MATCH :fts))"
+    where_sql = base_where_sql + cursor_sql
+    params = {"category": category, "fts": fts_query, "limit": page_size_num + 1, "offset": offset, "cursor": cursor}
 
     # Fetch total count
     total_row = await db_manager.fetch_one(
-        f"SELECT COUNT(*) as total FROM products WHERE {where_sql}",
-        {"category": category, "q": q_param},
+        f"SELECT COUNT(*) as total FROM products p WHERE {base_where_sql}",
+        {"category": category, "fts": fts_query, **{f"status{i}": v for i,v in enumerate(allowed_statuses)}},
     )
     total = total_row["total"] if total_row else 0
 
     # Fetch paginated rows sorted by SKU
     rows = await db_manager.fetch_all(
         f"""
-        SELECT sku, raw_title, raw_description, clean_title, category, brand, tags, status, error
-        FROM products
+        SELECT p.sku, p.raw_title, p.raw_description, p.clean_title, p.category, p.brand, p.tags, p.status, p.error, p.confidence, p.review_reasons
+        FROM products p
         WHERE {where_sql}
-        ORDER BY sku ASC
-        LIMIT :limit OFFSET :offset
+        ORDER BY p.sku ASC
+        LIMIT :limit {"" if cursor else "OFFSET :offset"}
         """,
-        params,
+        {**params, **{f"status{i}": v for i,v in enumerate(allowed_statuses)}},
     )
 
     items = []
@@ -234,14 +253,26 @@ async def list_products(
                 r["tags"] = []
         elif tags_raw is None:
             r["tags"] = []
+        try:
+            r["review_reasons"] = json.loads(r.get("review_reasons") or "[]")
+        except (TypeError, ValueError):
+            r["review_reasons"] = []
         items.append(r)
 
-    return {
+    has_more = len(items) > page_size_num
+    items = items[:page_size_num]
+    response = {
         "items": items,
         "page": page_num,
         "page_size": page_size_num,
         "total": total,
+        "next_cursor": items[-1]["sku"] if has_more and items else None,
     }
+    # Bound memory usage and keep result freshness within the documented short TTL.
+    if len(_product_search_cache) >= 256:
+        _product_search_cache.pop(next(iter(_product_search_cache)))
+    _product_search_cache[cache_key] = (time.monotonic() + 60, response)
+    return response
 
 
 @router.get("/products/{sku}")
@@ -249,9 +280,9 @@ async def get_product(sku: str):
     """Retrieves a single product listing by SKU."""
     row = await db_manager.fetch_one(
         """
-        SELECT sku, raw_title, raw_description, clean_title, category, brand, tags, status, error
+        SELECT sku, raw_title, raw_description, clean_title, category, brand, tags, status, error, confidence, review_reasons
         FROM products
-        WHERE sku = :sku AND status IN ('enriched', 'failed', 'approved')
+        WHERE sku = :sku AND status IN ('enriched', 'pending_review', 'failed', 'approved')
         """,
         {"sku": sku},
     )
@@ -266,6 +297,10 @@ async def get_product(sku: str):
             row["tags"] = []
     elif tags_raw is None:
         row["tags"] = []
+    try:
+        row["review_reasons"] = json.loads(row.get("review_reasons") or "[]")
+    except (TypeError, ValueError):
+        row["review_reasons"] = []
 
     return row
 
@@ -283,7 +318,7 @@ async def patch_product(sku: str, request: Request):
 
     # Product must exist in terminal state
     existing = await db_manager.fetch_one(
-        "SELECT * FROM products WHERE sku = :sku AND status IN ('enriched', 'failed', 'approved')",
+        "SELECT * FROM products WHERE sku = :sku AND status IN ('enriched', 'pending_review', 'failed', 'approved')",
         {"sku": sku},
     )
     if not existing:
@@ -295,6 +330,8 @@ async def patch_product(sku: str, request: Request):
         clean_title = body["clean_title"]
         if not isinstance(clean_title, str) or not clean_title.strip():
             raise HTTPException(status_code=400, detail="clean_title must be a non-empty string.")
+        if not 5 <= len(clean_title.strip()) <= 100:
+            raise HTTPException(status_code=400, detail="clean_title must be between 5 and 100 characters.")
         update_fields["clean_title"] = clean_title.strip()
 
     if "category" in body:
@@ -313,12 +350,18 @@ async def patch_product(sku: str, request: Request):
         if len(tags) > 5:
             raise HTTPException(status_code=400, detail="tags cannot exceed 5 items.")
         for t in tags:
-            if not isinstance(t, str) or t != t.lower():
-                raise HTTPException(status_code=400, detail=f"Tag '{t}' must be a lowercase string.")
-        update_fields["tags"] = json.dumps([t.strip() for t in tags])
+            if not isinstance(t, str) or t.strip() != t.strip().lower() or (t.strip() and not re.fullmatch(r"[\w]+(?:[-'][\w]+)*", t.strip(), flags=re.UNICODE)):
+                raise HTTPException(status_code=400, detail=f"Tag '{t}' must be a lowercase single word.")
+        update_fields["tags"] = json.dumps([t.strip() for t in tags if t.strip()])
+
+    if "brand" in body:
+        brand = body["brand"]
+        if brand is not None and (not isinstance(brand, str) or len(brand.strip()) > 120):
+            raise HTTPException(status_code=400, detail="brand must be null or a string up to 120 characters.")
+        update_fields["brand"] = brand.strip() if isinstance(brand, str) and brand.strip() else None
 
     # Build update SQL
-    set_clauses = ["status = 'approved'", "updated_at = :updated_at"]
+    set_clauses = ["status = 'approved'", "review_reasons = '[]'", "error = NULL", "updated_at = :updated_at"]
     params: Dict[str, Any] = {"sku": sku, "updated_at": now_iso()}
 
     for col, val in update_fields.items():
@@ -327,6 +370,7 @@ async def patch_product(sku: str, request: Request):
 
     sql = f"UPDATE products SET {', '.join(set_clauses)} WHERE sku = :sku"
     await db_manager.execute_write(sql, params)
+    invalidate_product_search_cache()
 
     # Return updated product
     return await get_product(sku)

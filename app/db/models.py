@@ -24,10 +24,10 @@ AllowedCategory = Literal[
 JobStatus = Literal["queued", "running", "completed", "failed"]
 
 # API Contract Product Statuses (Only enriched, failed, or approved are exposed)
-ProductStatus = Literal["enriched", "failed", "approved"]
+ProductStatus = Literal["enriched", "pending_review", "failed", "approved"]
 
 # Internal Database Product Statuses (includes pending & in_progress)
-DBProductStatus = Literal["pending", "in_progress", "enriched", "failed", "approved"]
+DBProductStatus = Literal["pending", "in_progress", "enriched", "pending_review", "failed", "approved"]
 
 
 class Job(BaseModel):
@@ -57,6 +57,8 @@ class Product(BaseModel):
     category: Optional[AllowedCategory] = None
     brand: Optional[str] = None
     tags: Optional[List[str]] = Field(default_factory=list)
+    confidence: Optional[float] = None
+    review_reasons: List[str] = Field(default_factory=list)
     status: ProductStatus
     error: Optional[str] = None
 
@@ -77,6 +79,21 @@ class Product(BaseModel):
             return [str(item) for item in v]
         return []
 
+    @field_validator("review_reasons", mode="before")
+    @classmethod
+    def parse_review_reasons_json(cls, v: Any) -> List[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            try:
+                parsed = json.loads(v)
+                return [str(item) for item in parsed] if isinstance(parsed, list) else []
+            except Exception:
+                return []
+        if isinstance(v, list):
+            return [str(item) for item in v]
+        return []
+
 
 class ProductInDB(BaseModel):
     """Internal product model representing the full SQLite database row."""
@@ -91,6 +108,8 @@ class ProductInDB(BaseModel):
     tags: Optional[Union[str, List[str]]] = None
     status: DBProductStatus
     error: Optional[str] = None
+    confidence: Optional[float] = None
+    review_reasons: Optional[Union[str, List[str]]] = None
     attempts: int = 0
     content_hash: str
     updated_at: str
@@ -116,6 +135,7 @@ class ProductPatchRequest(BaseModel):
     clean_title: Optional[str] = None
     category: Optional[AllowedCategory] = None
     tags: Optional[List[str]] = None
+    brand: Optional[str] = None
 
 
 class ProductListResponse(BaseModel):

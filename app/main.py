@@ -15,9 +15,10 @@ from app.core.exceptions import (
     ProductNotFoundError,
 )
 from app.core.config import settings
-from app.core.singletons import get_llm_provider_instance, init_singletons
+from app.core.singletons import get_llm_provider_instance, get_dedup_manager, init_singletons
 from app.db.init_db import init_db, run_crash_recovery
-from app.pipeline.queue import start_queue_consumer, stop_queue_consumer
+from app.pipeline.queue import start_queue_consumer, stop_queue_consumer, close_redis_queue, initialize_redis_queue
+from app.pipeline.rate_limit import close_rate_limiter
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI):
     """Lifespan context manager coordinating DB init, singletons, crash recovery, and queue consumer."""
     # 1. Initialize SQLite schema & WAL settings
     await init_db()
+    await initialize_redis_queue()
 
     # 2. Initialize singletons (semaphore, provider, dedup) inside the active event loop
     init_singletons()
@@ -43,6 +45,9 @@ async def lifespan(app: FastAPI):
 
     # Clean shutdown: stop queue consumer
     await stop_queue_consumer()
+    await close_redis_queue()
+    await close_rate_limiter()
+    await get_dedup_manager().aclose()
     provider = get_llm_provider_instance()
     close_provider = getattr(provider, "aclose", None)
     if close_provider is not None:
